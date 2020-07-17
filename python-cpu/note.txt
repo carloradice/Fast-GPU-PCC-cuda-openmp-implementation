@@ -1,0 +1,2 @@
+basta eseguire con python3 lo script:
+python3 cpu_pcc.py

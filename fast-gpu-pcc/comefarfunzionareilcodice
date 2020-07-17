@@ -1,0 +1,13 @@
+C++ compilazione 
+nvcc -lcublas -O2 -arch=compute_52 -code=sm_52 -std=c++11 CPU_side.cpp GPU_side.cu -o fast_gpu_pcc_exec
+
+modificare -arch e -code in base all'architettura: http://arnon.dk/tag/nvcc-flags/
+
+in questo caso è già per GTX 970
+
+C++ esecuzione
+./fast_gpu_pcc_exec n m wr
+dove:
+n = numero di voxel
+m = lunghezza della time series
+wr = 't' per scrivere su txt, 'b' su binario
