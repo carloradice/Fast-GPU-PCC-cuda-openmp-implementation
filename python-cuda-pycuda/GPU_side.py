@@ -4,9 +4,9 @@ import math
 import time
 import cupy as cp
 ##### PROVA ####
-# import skcuda.cublas as cublas
-# import  pycuda.gpuarray  as  gpuarray
-# import pycuda.driver
+import skcuda.cublas as cublas
+import  pycuda.gpuarray  as  gpuarray
+import pycuda.driver
 ###########################
 
 # threads per block
@@ -106,134 +106,6 @@ def matrix_to_vector_2(cormat, upper, n1, n, upper_size, N, i_so_far, M1):
 		indexi = indexi + i
 		upper[int(tmp_2)-1] = cormat[indexi]
 
-
-@cuda.jit
-def matmul(A, B, C):
-    """Perform square matrix multiplication of C = A * B
-    """
-    i, j = cuda.grid(2)
-    if i < C.shape[0] and j < C.shape[1]:
-    	tmp = 0.0
-    	for k in range(A.shape[1]):
-    		tmp += A[i, k] * B[k, j]
-    		C[i, j] = tmp
-
-
-@cuda.jit
-def fast_matmul(A, B, C):
-    """
-    Perform matrix multiplication of C = A * B
-    Each thread computes one element of the result matrix C
-    """
-
-    # Define an array in the shared memory
-    # The size and type of the arrays must be known at compile time
-    sA = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
-    sB = cuda.shared.array(shape=(TPB, TPB), dtype=float32)
-
-    x, y = cuda.grid(2)
-    
-    tx = cuda.threadIdx.x
-    ty = cuda.threadIdx.y
-    
-    if x >= C.shape[0] and y >= C.shape[1]:
-        # Quit if (x, y) is outside of valid C boundary
-        return
-
-    # Each thread computes one element in the result matrix.
-    # The dot product is chunked into dot products of TPB-long vectors.
-    tmp = 0.
-    for i in range(int(A.shape[1] / TPB)):
-        # Preload data into shared memory
-        sA[tx, ty] = A[x, ty + i * TPB]
-        sB[tx, ty] = B[tx + i * TPB, y]
-
-        # Wait until all threads finish preloading
-        cuda.syncthreads()
-
-        # Computes partial product on the shared memory
-        for j in range(TPB):
-            tmp += sA[tx, j] * sB[j, ty]
-
-        # Wait until all threads finish computing
-        cuda.syncthreads()
-
-    C[x, y] = tmp
-
-
-def cor_mat_2(BOLD, upper_tri, N, L):
-	# preprocessing fMRI data in CPU
-	start_time = time.time()
-	BOLD = preprocessing(BOLD, N, L)
-	stop_time = time.time()
-	delta = stop_time - start_time	
-	print("Running time for preprocessing: ", delta, "\n")
-	
-	# calcolo matrice trasposta
-	start_time = time.time()
-	BOLD_transpose = BOLD.transpose()
-	stop_time = time.time()
-	delta = stop_time - start_time	
-	print("Running time for transpose: ", delta, "\n")
-	
-	start_time = time.time()
-	# copy arrays to the device
-	#BOLD_device = cuda.to_device(BOLD)
-	#BOLD_device_transpose = cuda.to_device(BOLD_transpose)
-
-	# allocate memory on the device for the result
-	#result_device = cuda.device_array((N, N))
-
-	# configure the blocks
-	threads_per_block = (TPB, TPB)
-	blocks_per_grid_x = int(math.ceil(BOLD.shape[0] / threads_per_block[0]))
-	blocks_per_grid_y = int(math.ceil(BOLD_transpose.shape[1] / threads_per_block[1]))
-	blocks_per_grid = (blocks_per_grid_x, blocks_per_grid_y)
-
-	print("Thread per block:", threads_per_block)
-	print("Blocks per grid:", blocks_per_grid, "\n")
-
-
-	# start the kernel for matrix multiplication
-	# matmul[blocks_per_grid, threads_per_block](BOLD_device, 
-	# 										   BOLD_device_transpose, 
-	# 										   result_device)
-
-	# start the kernel for fast matrix multiplication
-	# fast_matmul[blocks_per_grid, threads_per_block](BOLD_device, 
-	# 										   		BOLD_device_transpose, 
-	# 										   		result_device)
-
-	result_device = matrix_mul_cupy(BOLD, BOLD_transpose)
-
-	#cuda.synchronize()
-	stop_time = time.time()
-	delta = stop_time - start_time	
-	print("Running time core function: ", delta, "\n")
-
-	start_time = time.time()
-	
-	# funziona meglio con matrici piccole (CPU)
-	# upper_tri = result_device.copy_to_host()
-	# m = upper_tri.shape[0]
-	# r,c = np.triu_indices(m,1)
-	# upper_tri = upper_tri[r, c]
-	
-	# funziona meglio con matrici grandi (parallelo)
-	result_device = cuda.to_device(result_device)
-	upper_tri_device = cuda.to_device(upper_tri)
-	threads_per_block = 1024
-	blocks_per_grid = int(math.ceil(1 + ((N*N - 1) / threads_per_block)))
-	matrix_to_vector[blocks_per_grid, threads_per_block](result_device,
-	 													 upper_tri_device,
-	 													 N)
-	upper_tri = upper_tri_device.copy_to_host()
-
-	stop_time = time.time()
-	delta = stop_time - start_time	
-	print("Running time to get upper tri: ", delta, "\n")
-
-	return upper_tri
 
 def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 

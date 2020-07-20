@@ -199,6 +199,8 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
     block=OOO;
     N_prime=N;
     
+    int count = 1; // creata da me
+
     float* add_uper_cpu=upper_tri;
     long long M1,temp,temp2=0,temp3=0;
     int so_far=0;
@@ -213,6 +215,7 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
     std::cout << "block: " << block << std::endl; 
     std::cout << "N_prime: " << N_prime << std::endl;
 
+    std::cout << "In while" << std::endl; 
     while(flag==1)
     {
         //cout<<"this is block: "<<block<<"\n\n";        
@@ -235,6 +238,8 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
             cormat_fullsize=block;
             cormat_fullsize*=N_prime;
 
+            std::cout << "block: " << block << std::endl; 
+            std::cout << "N_prime: " << N_prime << std::endl;
             std::cout << "cormat_fullsize: " << cormat_fullsize << std::endl;
             std::cout << "M1: " << M1 << std::endl;
 
@@ -263,13 +268,6 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
 
         std::cout << "so_far*L: " << so_far*L << std::endl;
 
-        cudaMemGetInfo(&free,&total_mem);
-        long long available_mem = free;
-        available_mem/=sizeof(float);
-        available_mem-=(N*L);//Getting available memory without
-
-        std::cout << "Available memory: " << available_mem << std::endl;
-
         stat = cublasSgemm(handle, CUBLAS_OP_T,  CUBLAS_OP_N, block,N_prime,L,  &alpha, devBOLD+(so_far*L), L, devBOLD+(so_far*L), L, &beta, devCormat, block);//multiply block x L to L x N_prime = block x N_prime
 
         if (stat != CUBLAS_STATUS_SUCCESS)
@@ -287,9 +285,13 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
         int block_size=1024;
         long long grid_size=1+((temp2-1)/block_size);
 
+        std::cout << "temp2: " << temp2 << std::endl;
+        std::cout << "block_size: " << block_size << std::endl;
+        std::cout << "grid_size: " << grid_size << std::endl;
+
         ker2<<<grid_size,block_size>>>(devCormat,dev_upper,block,N_prime,upper_size,N,ii,M1);
         
-	memset((void*)add_uper_cpu, 0, sizeof(float) *M1); 
+	    memset((void*)add_uper_cpu, 0, sizeof(float) *M1); 
 	
         cudaDeviceSynchronize();
         ii+=block;
@@ -297,6 +299,18 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
         gpuErrchk( cudaPeekAtLastError() );
         
         cudaStat= cudaMemcpy(add_uper_cpu, dev_upper, sizeof(float) *M1, cudaMemcpyDeviceToHost);
+
+        // print di debug su file
+        ofstream correlations_print;
+        std::string file = "/home/carlo/Documents/progetto-calcolo-scientifico/fast_gpu_pcc_corrs_prova" + std::to_string(count) + ".txt";
+        count += 1;
+        correlations_print.open(file);
+        for(long long tab =0;tab<M1;tab++) {    
+                   correlations_print << add_uper_cpu[tab] << '\n';
+        }
+        correlations_print.close();
+        std::cout << "stampa effettuata su file" << file << std::endl;
+
 
         if (cudaStat != cudaSuccess)
         {

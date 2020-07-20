@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
         cudaEventElapsedTime(&time, start, stop);
     }
 
-/*    // scrittura valori della matrice triangolare in file binario
+    // scrittura valori della matrice triangolare in file binario
     if (wr == 'b'){
         cout<<"\nWriting correlation values into the binary file ... \n";
         ofstream OutFile;
@@ -217,5 +217,5 @@ int main(int argc, char *argv[])
         correlations_print.close();
         cout<<"\nCorrelations are stored into the text file fast_gpu_pcc_corrs.txt \n";
         }
-        return 0;*/
+        return 0;
 }
