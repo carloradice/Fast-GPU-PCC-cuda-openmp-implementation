@@ -1,4 +1,4 @@
-from numba import vectorize, cuda, float32
+from numba import vectorize, cuda as cd, float32
 import numpy as np
 import math
 import time
@@ -6,13 +6,12 @@ import cupy as cp
 ##### PROVA ####
 import skcuda.cublas as cublas
 import  pycuda.gpuarray  as  gpuarray
-import pycuda.driver
+import pycuda.driver as cuda
+import pycuda.autoinit
+import pycuda.compiler
+#from  skcuda.cublas  import *
 ###########################
 
-# threads per block
-TPB = 16
-
-gpu = cuda.gpus.lst[0]
 
 def remaining_N2(N, L, available_mem):
 	x = available_mem
@@ -20,40 +19,6 @@ def remaining_N2(N, L, available_mem):
 	temp *= 2
 	x /= temp 
 	return int(x)
-
-
-def matrix_mul_cupy_3(A, B, so_far, block, N_prime, L):
-	# A = np.squeeze(np.asarray(A))
-	# B = np.squeeze(np.asarray(B))
-	A = A[so_far*L:so_far*L+block, :]
-	B = B[:, so_far*L:so_far*L+N_prime]
-
-	print(A.shape)
-	print(B.shape)
-
-	A_device = cp.asarray(A)
-	B_device = cp.asarray(B)
-	C = np.zeros((A.shape[0], B.shape[1]), np.float32)
-	print(C.shape)
-	C_device = cp.asarray(C)
-
-	#C_device =
-	C = cp.matmul(A_device, B_device)
-	#C = cp.asnumpy(C_device)
-
-	return C
-
-
-def matrix_mul_cupy(A, B):
-	A_device = cp.asarray(A)
-	B_device = cp.asarray(B)
-	C = np.array((A.shape[0], B.shape[1]))
-	C_device = cp.asarray(C)
-
-	C_device = cp.matmul(A_device, B_device)
-	C = cp.asnumpy(C_device)
-
-	return C
 
 
 # preprocessing della matrice in CPU
@@ -70,50 +35,117 @@ def preprocessing(BOLD, N, L):
 	return BOLD
 
 
-@cuda.jit
-def matrix_to_vector(result_device, upper_tri_device, N):
-	idx = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x 
-	i = int(idx % N)
-	j = int(idx / N)
-	if i < j and i < N and j < N:
-		tmp = i
-		tmp *= (i+1)
-		tmp /= 2
-		tmp_2 = i
-		tmp_2 *= N
-		tmp_2 = tmp_2 - tmp
-		tmp_2 += j
-		tmp_2 -= i
-		upper_tri_device[int(tmp_2)-1] = result_device[i][j]
+def cor_mat_2(BOLD, upper_tri, N, L):
+	# preprocessing fMRI data in CPU
+	start_time = time.time()
+	BOLD = preprocessing(BOLD, N, L)
+	stop_time = time.time()
+	delta = stop_time - start_time	
+	print("Running time for preprocessing: ", delta, "\n")
+	
+	# # calcolo matrice trasposta
+	# start_time = time.time()
+	# BOLD_transpose = BOLD.transpose()
+	# stop_time = time.time()
+	# delta = stop_time - start_time	
+	# print("Running time for transpose: ", delta, "\n")
+	
+	alpha = np.float32(1.0)
+	beta = np.float32(0.0)
+
+	# passaggio degli oggetti su device
+	BOLD_device = gpuarray.to_gpu(BOLD)
+	# BOLD_transpose_device = gpuarray.to_gpu(BOLD_transpose)
+	
+	result = np.zeros((BOLD.shape[0], BOLD.shape[0]), np.float32)
+	result_device = gpuarray.to_gpu(result)
+
+	print("BOLD_device shape:", BOLD_device.shape)
+	print("result_device shape:", result_device.shape)
+
+	start_time = time.time()
+	h = cublas.cublasCreate()
+	cublas.cublasSgemm(h,
+					   'T',
+					   'n',
+					   N,
+					   N,
+					   L,
+					   alpha,
+					   BOLD_device.gpudata,
+					   L,
+					   BOLD_device.gpudata,
+					   L,
+					   beta,
+					   result_device.gpudata,
+					   N)
+
+	# result1 = result_device.get()
+	# print("result1 shape: ", result1.shape)
+	# nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr_prova.txt"
+	# result1.tofile(nome_file, sep="\n")
+
+	stop_time = time.time()
+	delta = stop_time - start_time	
+	print("Running time core function: ", delta, "\n")
+
+	start_time = time.time()
+
+	threads_per_block = 1024
+	blocks_per_grid = int(math.ceil(1 + ((N*N - 1) / threads_per_block)))
+
+	mod = pycuda.compiler.SourceModule("""
+		__global__ void ker(float * cormat, float * upper,int n1,int n)
+		{
+			long idx = blockDim.x*blockIdx.x+threadIdx.x;
+			long i = idx%n1;
+			long j = idx/n1;
+			if(i<j && i<n1 && j<n)
+			{
+		        long tmp=i;
+		        tmp*=(i+1);
+		        tmp/=2;
+		        long tmp_2=i;
+		        tmp_2*=n;
+		        tmp_2=tmp_2-tmp;
+		        tmp_2+=j;
+		        tmp_2-=i;
+		        upper[tmp_2-1]=cormat[j*n+i];
+			}
+		}
+		""")
+
+	result_device = result_device.reshape(-1)
+	print("result device shape:", result_device.shape)
+
+	upper_tri_device = gpuarray.to_gpu(upper_tri)
+
+	funct = mod.get_function("ker")
+	funct(result_device, 
+		  upper_tri_device, 
+		  np.int32(N),
+		  np.int32(N),    
+		  block=(threads_per_block, 1, 1),
+          grid=(blocks_per_grid, 1)
+          )
+	upper_tri = upper_tri_device.get()
+	stop_time = time.time()
+	delta = stop_time - start_time	
+	print("Running time to get upper tri: ", delta, "\n")
+	cublas.cublasDestroy(h)
+	return upper_tri
 
 
-@cuda.jit
-def matrix_to_vector_2(cormat, upper, n1, n, upper_size, N, i_so_far, M1):
-	idx = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x 
-	i = int(idx / n)
-	j = int(idx % n)
-	if i < j and i < n1 and j < n:
-		tmp = i
-		tmp *= (i+1)
-		tmp /= 2
-		tmp_2 = i
-		tmp_2 *= n
-		tmp_2 = tmp_2 - tmp
-		tmp_2 += j
-		tmp_2 -= i
-		indexi = n1
-		indexi *= j
-		indexi = indexi + i
-		upper[int(tmp_2)-1] = cormat[indexi]
+def cor_mat_3(BOLD, N, L, OOO):
+	# pycuda initialization
+	# pycuda.driver.init()
+	# device = pycuda.driver.Device(0)
+	# ctx = device.make_context()
+	# ctx.pop()
 
-
-def cor_mat_3(BOLD, upper_tri, N, L, OOO):
-
-	mempool = cp.get_default_memory_pool()
-	pinned_mempool = cp.get_default_pinned_memory_pool()
 	# calcolo memoria disponibile
-	meminfo = cuda.current_context().get_memory_info()
-	print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
+	meminfo = cuda.mem_get_info()
+	print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 	available_mem = float(meminfo[0])
 	available_mem /= np.dtype(np.float32).itemsize
 	available_mem -= N * L
@@ -137,7 +169,7 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	# inizializzazione variabili
 	flag = 1
 	upper_size = (N-1) * N / 2
-	add_uper_cpu = upper_tri
+	# add_uper_cpu = upper_tri
 	block = OOO
 	N_prime = N
 	temp = 0
@@ -146,10 +178,11 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	ii=0
 	pak = 0
 	so_far = 0
-	cormat_fullsize = 0
 	count = 1
 	dev_upper = 0
-	final = np.array([], np.float32)
+
+	alpha = np.float32(1.0)
+	beta = np.float32(0.0)
 
 	print("Before while")
 	print("block: ", block)
@@ -170,186 +203,155 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 		M1 *= block
 		M1 -= temp
 
-		cormat_fullsize = block
-		cormat_fullsize *= N_prime
 		M1 = int(M1)
-
-		print("cormat_fullsize: ", cormat_fullsize)
 		
 		print("M1: ", M1)
-
-		#dev_corrmat = cuda.to_device(np.zeros(cormat_fullsize, np.float32))
-	
-		#dev_upper = cuda.to_device(np.zeros(M1, np.float32))
 		
 		pak += 1
 
 		print("so_far*L: ", so_far*L)
+		#########################################################################################
 
-		#############################PROVA##########################################
-		# pycuda.driver.init()
-		# device = pycuda.driver.Device(0)
-		# ctx = device.make_context()
-		
-		# BOLD_so_far = BOLD[so_far*L:so_far*L+block, :]
-		# BOLD_transpose_so_far = BOLD_transpose[:, so_far*L:so_far*L+N_prime]
-		# print(BOLD_so_far.shape)
-		# print(BOLD_transpose_so_far.shape)
+		BOLD_so_far = BOLD[so_far*L:so_far*L+block, :]
+		BOLD_transpose_so_far = BOLD_transpose[:, so_far*L:so_far*L+N_prime]
 
-		# c = np.zeros((BOLD.shape[0], BOLD_transpose.shape[1]), np.float32)
-		# # BOLD_so_far_device = cp.asarray(BOLD_so_far)
-		# # BOLD_transpose_so_far_device = cp.asarray(BOLD_transpose_so_far)
+		print("BOLD_so_far shape: ", BOLD_so_far.shape)
+		print("BOLD_transpose_so_far shape: ", BOLD_transpose_so_far.shape)
 
-		# # BOLD_so_far_device = cuda.to_device(BOLD_so_far)
-		# # BOLD_transpose_so_far_device = cuda.to_device(BOLD_transpose_so_far)
-		# alpha = np.float32 (1.0)                             
-		# beta = np.float32 (1.0) 
-		# a_gpu = gpuarray.to_gpu(BOLD_so_far.copy())
-		# b_gpu = gpuarray.to_gpu(BOLD_transpose_so_far.copy())
-		# c_gpu = gpuarray.to_gpu(c.copy())
-		
-		# h = cublas.cublasCreate()  
-		
+		result = np.zeros((block, N_prime), np.float32)
 
-		# cublas.cublasSgemm(h, 'n', 'n', block, N_prime, L, alpha, a_gpu, L, b_gpu, L, beta, c_gpu, block)
-		##########################################################################
-
-		#################################PROVA CHE FUNZIONA #########################################
-		BOLD_so_far = BOLD[so_far:so_far*L+block, :]
-		BOLD_transpose_so_far = BOLD_transpose[:, so_far:so_far*L+N_prime]
-		print(BOLD_so_far.shape)
-		print(BOLD_transpose_so_far.shape)
-		
-		# calcolo memoria disponibile
-		meminfo = cuda.current_context().get_memory_info()
-		print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
 		# copy arrays to the device
-		BOLD_so_far_device = cuda.to_device(BOLD_so_far)
-		BOLD_transpose_so_far_device = cuda.to_device(BOLD_transpose_so_far)
+		BOLD_so_far_device = gpuarray.to_gpu(BOLD_so_far)
+		BOLD_transpose_so_far_device = gpuarray.to_gpu(BOLD_transpose_so_far)
 
-		# calcolo memoria disponibile
+		print("BOLD_so_far_device shape: ", BOLD_so_far_device.shape)
+		print("BOLD_transpose_so_far_device shape: ", BOLD_transpose_so_far_device.shape)
 		
-		meminfo = cuda.current_context().get_memory_info()
-		print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
+		# calcolo memoria disponibile
+		meminfo = cuda.mem_get_info()
+		print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 		
 		# allocate memory on the device for the result
-		result = np.zeros((block, N_prime), np.float32)
-		print(result.nbytes)
-		result_device = cuda.to_device(result)
+		result_device = gpuarray.to_gpu(result)
+
+		# calcolo memoria disponibile
+		meminfo = cuda.mem_get_info()
+		print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 		
-		meminfo = cuda.current_context().get_memory_info()
-		print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
+		h = cublas.cublasCreate()
 
-		# configure the blocks
-		threads_per_block = (TPB, TPB)
-		blocks_per_grid_x = int(math.ceil(BOLD_so_far.shape[0] / threads_per_block[0]))
-		blocks_per_grid_y = int(math.ceil(BOLD_transpose_so_far.shape[1] / threads_per_block[1]))
-		blocks_per_grid = (blocks_per_grid_x, blocks_per_grid_y)
+		# cublas.cublasSgemm(h,
+		# 			'n',
+		# 			'n',
+		# 			BOLD_so_far.shape[0],
+		# 			BOLD_transpose_so_far.shape[1],
+		# 			BOLD_so_far.shape[1],
+		# 			alpha,
+		# 			BOLD_so_far_device.gpudata,
+		# 			BOLD_so_far.shape[0],
+		# 			BOLD_transpose_so_far_device.gpudata,
+		# 			BOLD_transpose_so_far.shape[0],
+		# 			beta,
+		# 			result_device.gpudata,
+		# 			result.shape[0]
+		# 			)
 
-		print("Thread per block:", threads_per_block)
-		print("Blocks per grid:", blocks_per_grid, "\n")
+		cublas.cublasSgemm(h,
+						   'n',
+						   'n',
+						   block,
+						   N_prime,
+						   L,
+						   alpha,
+						   BOLD_so_far_device.gpudata,
+						   block,
+						   BOLD_transpose_so_far_device.gpudata,
+						   L,
+						   beta,
+						   result_device.gpudata,
+						   block
+						   )
 
+		result1 = result_device.get()
+		# nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr_prova.txt"
+		# result1.tofile(nome_file, sep="\n")
+		result1 = result1.reshape(-1)
+		print("result1 shape: ", result1.shape)
 
-		# start the kernel for matrix multiplication
-		matmul[blocks_per_grid, threads_per_block](BOLD_so_far_device, 
-												   BOLD_transpose_so_far_device, 
-												   result_device)
+		del result_device
 
-		cuda.synchronize()
+		cublas.cublasDestroy(h)
 
 		temp2 = block
 		temp2 *= N_prime
 
-		#dev_upper = cuda.to_device(np.zeros(M1, np.float32))
-		upper = np.zeros(M1, np.float32)
-		print(upper.shape)
-		#dev_upper = cp.asarray(upper)
-		dev_upper = cuda.to_device(upper)
-
-		meminfo = cuda.current_context().get_memory_info()
-		print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
-
-		#result = result_device.copy_to_host()
-		#print(result.shape)
-		result_device = cp.asarray(result_device).reshape(-1)
+		# calcolo memoria disponibile
+		meminfo = cuda.mem_get_info()
+		print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+		
+		result_device = gpuarray.to_gpu(result1)
 
 		threads_per_block = 1024
 		blocks_per_grid = 1 + math.ceil(((temp2-1) / threads_per_block))
+		grid = (blocks_per_grid, 1)
 
 		print("temp2:", temp2)
 		print("threads_per_block: ", threads_per_block)
 		print("blocks_per_grid: ", blocks_per_grid)
 
+		upper = np.zeros(M1, np.float32)
+		print("upper shape:", upper.shape)
+		dev_upper = gpuarray.to_gpu(upper)
+
 		print("dev_upper shape: ", dev_upper.shape)
 		print("result_device shape: ", result_device.shape)
 
+		mod = pycuda.compiler.SourceModule("""
+			__global__ void ker2(float * cormat, float * upper,int n1,int n,long long upper_size,int N,int i_so_far,long long M1)
+			{
+				long long idx = blockDim.x;
+				idx*=blockIdx.x;
+				idx+=threadIdx.x;
+				long i = idx/n;
+				long j = idx%n;
 
-		matrix_to_vector_2[blocks_per_grid, threads_per_block](result_device,
-			dev_upper,
-			block,
-			N_prime,
-			upper_size,
-			N,
-			ii,
-			M1)
+				if(i<j && i<n1 && j<n)// &&i<N &&j<N && idx<(n1*n))
+				{
+				        long long tmp=i;
+				        tmp*=(i+1);
+				        tmp/=2;
+				        long long tmp_2=i;
+				        tmp_2*=n;
+				        tmp_2=tmp_2-tmp;
+				        tmp_2+=j;
+				        tmp_2-=i;
+				        long long indexi=n1;
+				        indexi*=j;
+				        indexi=indexi+i;
+				        upper[tmp_2-1]=cormat[indexi];
+				}
+			}
+  			""")
 
-		cuda.synchronize()
-
-		ii += block
-
-		add_uper_cpu = dev_upper.copy_to_host()
-
-		print("add_uper_cpu: ", add_uper_cpu.shape)
-		nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr_prova" + str(count) + ".txt"
-		add_uper_cpu.tofile(nome_file, sep="\n")
-
-		final = np.append(final, add_uper_cpu)
-		so_far += block
-
-		if N_prime > block:
-			N_prime = N_prime - block
-			block = remaining_N2(N_prime, L, available_mem)
-			if N_prime < block:
-				block = N_prime
-
-		# liberare la memoria 
-		#dev_upper   		 			# cuda.to_device
-		#BOLD_so_far_device 				# cuda.to_device
-		#BOLD_transpose_so_far_device    # cuda.to_device
-		#result_device 					# cp.asarray
-		del result_device
-		del dev_upper
-		del BOLD_so_far_device
-		del BOLD_transpose_so_far_device
+		print(result_device.dtype)
+		# calcolo memoria disponibile
+		meminfo = cuda.mem_get_info()
+		print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 		
-		mempool = cp.get_default_memory_pool()
-		pinned_mempool = cp.get_default_pinned_memory_pool()
+		funct = mod.get_function("ker2")
+		funct(result_device, 
+			  dev_upper, 
+			  np.int32(block), 
+			  np.int32(N_prime),
+			  np.int64(upper_size),
+			  np.int32(N),
+			  np.int32(ii), 
+			  np.int64(M1),       
+			  block=(threads_per_block, 1, 1),
+              grid=grid
+              )
 
-		cuda.defer_cleanup()
-
-		meminfo = cuda.current_context().get_memory_info()
-		print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
-
-
-		count += 1
-
-		return final
-		###########################################################################
-
-
-		#dev_corrmat = matrix_mul_cupy_3(BOLD, BOLD_transpose, so_far, block, N_prime, L)
-
-		# cuda.synchronize()
-
-		# temp2 = block
-		# temp2 *= N_prime
-
-		# upper_size = (N-1) * N / 2
-
-		# dev_corrmat = cuda.to_device(dev_corrmat)
-		# threads_per_block = 1024
-		# blocks_per_grid = int(math.ceil(1 + ((N*N - 1) / threads_per_block)))
-		# matrix_to_vector_2[blocks_per_grid, threads_per_block](dev_corrmat,
+		# matrix_to_vector_2[blocks_per_grid, threads_per_block](result_device,
 		# 	dev_upper,
 		# 	block,
 		# 	N_prime,
@@ -357,14 +359,19 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 		# 	N,
 		# 	ii,
 		# 	M1)
-		# cuda.synchronize()
 
-		# ii += block
+		ii += block
 
-		# add_uper_cpu = dev_upper.copy_to_host()
+		add_uper_cpu = dev_upper.get()
 
-		# temp3 += M1
-		# add_uper_cpu = upper_tri + temp3
+		print("add_uper_cpu: ", add_uper_cpu.shape)
+		nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr_prova" + str(count) + ".txt"
+		add_uper_cpu.tofile(nome_file, sep="\n", fmt="%.7f")
+
+
+		flag = 0
+		#########################################################################################
+
 		# so_far += block
 
 		# if N_prime > block:
@@ -372,3 +379,25 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 		# 	block = remaining_N2(N_prime, L, available_mem)
 		# 	if N_prime < block:
 		# 		block = N_prime
+
+		# # liberare la memoria 
+		# #dev_upper   		 			# cuda.to_device
+		# #BOLD_so_far_device 				# cuda.to_device
+		# #BOLD_transpose_so_far_device    # cuda.to_device
+		# #result_device 					# cp.asarray
+		# del result_device
+		# del dev_upper
+		# del BOLD_so_far_device
+		# del BOLD_transpose_so_far_device
+		
+		# mempool = cp.get_default_memory_pool()
+		# pinned_mempool = cp.get_default_pinned_memory_pool()
+
+		# cuda.defer_cleanup()
+
+		# meminfo = cuda.current_context().get_memory_info()
+		# print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
+
+
+		# count += 1
+

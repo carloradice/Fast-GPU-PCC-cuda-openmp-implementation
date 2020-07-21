@@ -10,6 +10,7 @@
 #include <stack>
 #include <sstream>
 #include <math.h>
+#include <typeinfo>
 using namespace std;
 
 long long remaining_N2(int , int ,long long );
@@ -268,7 +269,20 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
 
         std::cout << "so_far*L: " << so_far*L << std::endl;
 
-        stat = cublasSgemm(handle, CUBLAS_OP_T,  CUBLAS_OP_N, block,N_prime,L,  &alpha, devBOLD+(so_far*L), L, devBOLD+(so_far*L), L, &beta, devCormat, block);//multiply block x L to L x N_prime = block x N_prime
+        stat = cublasSgemm(handle, 
+                           CUBLAS_OP_T,  
+                           CUBLAS_OP_N, 
+                           block,
+                           N_prime,
+                           L,  
+                           &alpha, 
+                           devBOLD+(so_far*L), 
+                           L, 
+                           devBOLD+(so_far*L), 
+                           L, 
+                           &beta, 
+                           devCormat, 
+                           block);//multiply block x L to L x N_prime = block x N_prime
 
         if (stat != CUBLAS_STATUS_SUCCESS)
         {
@@ -288,6 +302,7 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
         std::cout << "temp2: " << temp2 << std::endl;
         std::cout << "block_size: " << block_size << std::endl;
         std::cout << "grid_size: " << grid_size << std::endl;
+        std::cout << "devCormat type: " << typeid(*devCormat).name();
 
         ker2<<<grid_size,block_size>>>(devCormat,dev_upper,block,N_prime,upper_size,N,ii,M1);
         
@@ -304,7 +319,7 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
         ofstream correlations_print;
         std::string file = "/home/carlo/Documents/progetto-calcolo-scientifico/fast_gpu_pcc_corrs_prova" + std::to_string(count) + ".txt";
         count += 1;
-        correlations_print.open(file);
+        correlations_print.open(file); 
         for(long long tab =0;tab<M1;tab++) {    
                    correlations_print << add_uper_cpu[tab] << '\n';
         }

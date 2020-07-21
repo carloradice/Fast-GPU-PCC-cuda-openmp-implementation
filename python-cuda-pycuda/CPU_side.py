@@ -1,14 +1,15 @@
 import numpy as np
-from numba import cuda
+import pycuda.autoinit
+import pycuda.driver as cuda
 from GPU_side import cor_mat_2, cor_mat_3
 import time
 
-gpu = cuda.gpus.lst[0]
+#gpu = cuda.gpus.lst[0]
 
 # questa funzione controlla che ci sia abbastanza memoria per calcolare la matrice
 def remaining_mem(N, L, flag):
-	meminfo = cuda.current_context().get_memory_info()
-	print("%s, free: %s bytes, total, %s bytes" % (gpu, meminfo[0], meminfo[1]))
+	meminfo = cuda.mem_get_info()
+	print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 	available_mem = float(meminfo[0])
 	available_mem /= np.dtype(np.float32).itemsize
 	NL = N * L
@@ -49,21 +50,25 @@ def main():
 		stop_time = time.time()
 		delta = stop_time - start_time	
 		print("Running time for computing correlations: ", delta, "\n")
-		np.savetxt("/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt", upper_tri, delimiter=" ", fmt="%.7f")
+		#np.savetxt("/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt", upper_tri, delimiter=" ", fmt="%.7f")
+		nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
+		upper_tri.tofile(nome_file, sep="\n", format="%.7f")
+
 
 	# se la matrice occupa più memoria del totale
 	if N > rem_mem:
 		print("cor_mat_3")
 		start_time = time.time()
 
-		upper_tri = cor_mat_3(BOLD, upper_tri, N, L, rem_mem)
+		upper_tri = cor_mat_3(BOLD, N, L, rem_mem)
 
 		stop_time = time.time()
 		delta = stop_time - start_time	
 		print("Running time for computing correlations: ", delta, "\n")
 
-		nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
-		upper_tri.tofile(nome_file, sep="\n")
+		# nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
+		# upper_tri.tofile(nome_file, sep="\n")
+	
 	
 
 if __name__ == '__main__':
