@@ -34,6 +34,7 @@ def main():
 	# creazione matrice triangolare superiore e inizializzazione a zero
 	size = int(((N-1) * N) / 2)
 	upper_tri = np.zeros(size, np.float32)
+	print("upper_tri shape:", upper_tri.shape)
 	
 	# calcolo memoria necessaria per la matrice
 	rem_mem = remaining_mem(N, L, 0)
@@ -42,33 +43,26 @@ def main():
 	print("Computing correlations ...")
 	# se la matrice occupa meno memoria del totale
 	if N <= rem_mem:
+
 		print("cor_mat_2")
 		start_time = time.time()
-
 		upper_tri = cor_mat_2(BOLD, upper_tri, N, L)
-		
 		stop_time = time.time()
 		delta = stop_time - start_time	
 		print("Running time for computing correlations: ", delta, "\n")
-		#np.savetxt("/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt", upper_tri, delimiter=" ", fmt="%.7f")
-		nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
-		upper_tri.tofile(nome_file, sep="\n", format="%.7f")
-
 
 	# se la matrice occupa più memoria del totale
 	if N > rem_mem:
+
 		print("cor_mat_3")
 		start_time = time.time()
-
-		upper_tri = cor_mat_3(BOLD, N, L, rem_mem)
-
+		upper_tri = cor_mat_3(BOLD, upper_tri, N, L, rem_mem)
 		stop_time = time.time()
 		delta = stop_time - start_time	
 		print("Running time for computing correlations: ", delta, "\n")
 
-		# nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
-		# upper_tri.tofile(nome_file, sep="\n")
-	
+	nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
+	upper_tri.tofile(nome_file, sep="\n", format="%.7f")
 	
 
 if __name__ == '__main__':
