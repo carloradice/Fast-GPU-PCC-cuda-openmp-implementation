@@ -316,7 +316,7 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
         cudaStat= cudaMemcpy(add_uper_cpu, dev_upper, sizeof(float) *M1, cudaMemcpyDeviceToHost);
 
         // print di debug su file
-        ofstream correlations_print;
+/*        ofstream correlations_print;
         std::string file = "/home/carlo/Documents/progetto-calcolo-scientifico/fast_gpu_pcc_corrs_prova" + std::to_string(count) + ".txt";
         count += 1;
         correlations_print.open(file); 
@@ -324,7 +324,7 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
                    correlations_print << add_uper_cpu[tab] << '\n';
         }
         correlations_print.close();
-        std::cout << "stampa effettuata su file" << file << std::endl;
+        std::cout << "stampa effettuata su file" << file << std::endl;*/
 
 
         if (cudaStat != cudaSuccess)

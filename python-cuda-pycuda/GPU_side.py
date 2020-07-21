@@ -3,14 +3,11 @@ import numpy as np
 import math
 import time
 import cupy as cp
-##### PROVA ####
 import skcuda.cublas as cublas
 import  pycuda.gpuarray  as  gpuarray
 import pycuda.driver as cuda
 import pycuda.autoinit
 import pycuda.compiler
-#from  skcuda.cublas  import *
-###########################
 
 
 def remaining_N2(N, L, available_mem):
@@ -152,7 +149,6 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	pak = 0
 	so_far = 0
 	count = 1
-	dev_upper = 0
 	temp4 = 0
 
 	alpha = np.float32(1.0)
@@ -160,11 +156,19 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 
 	while flag is 1:
 		print("###### ITERAZIONE ", count, " #####")
+		# calcolo memoria disponibile
+		meminfo = cuda.mem_get_info()
+		print("After BOLD_device free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+
 		print("block: ", block)
 		print("N_prime: ", N_prime)
 		# checking for the last chunk
 		if block == N_prime:
 			flag = 0
+
+		if pak is not 0:
+			del dev_upper
+			del result_device
 
 		temp = block
 		temp *= (block + 1)
@@ -181,27 +185,11 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 		pak += 1
 
 		print("so_far*L: ", so_far*L)
-		#########################################################################################
-
-		# BOLD_so_far = BOLD[so_far*L:so_far*L+block, :]
-		# BOLD_transpose_so_far = BOLD_transpose[:, so_far*L:so_far*L+N_prime]
-
-		# print("BOLD_so_far shape: ", BOLD_so_far.shape)
-		# print("BOLD_transpose_so_far shape: ", BOLD_transpose_so_far.shape)
 
 		result = np.zeros((block, N_prime), np.float32)
 		print("result shape: ", result.shape)
 
-		# copy arrays to the device
-		# BOLD_so_far_device = gpuarray.to_gpu(BOLD_so_far)
-		# BOLD_transpose_so_far_device = gpuarray.to_gpu(BOLD_transpose_so_far)
 		BOLD_device = BOLD_device.reshape(-1)
-
-		# print("BOLD_device[so_far*L:so_far*L+block, :] shape ", BOLD_device[so_far*L:].shape)
-
-		# # calcolo memoria disponibile
-		# meminfo = cuda.mem_get_info()
-		# print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 		
 		# allocate memory on the device for the result
 		result_device = gpuarray.to_gpu(result)
@@ -227,28 +215,6 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 				   beta,
 				   result_device.gpudata,
 				   block)
-
-		# cublas.cublasSgemm(h,
-		# 				   'T',
-		# 				   'n',
-		# 				   block,
-		# 				   N_prime,
-		# 				   L,
-		# 				   alpha,
-		# 				   BOLD_device[so_far*L:so_far*L+block, :].gpudata,
-		# 				   L,
-		# 				   BOLD_device[so_far*L:so_far*L+block, :].gpudata,
-		# 				   L,
-		# 				   beta,
-		# 				   result_device.gpudata,
-		# 				   block)
-
-		# result1 = result_device.get()
-		# nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr_prova.txt"
-		# result1.tofile(nome_file, sep="\n")
-		# result1 = result1.reshape(-1)
-		# print("result1 shape: ", result1.shape)
-		# result_device = result_device.reshape(-1)
 
 		temp2 = block
 		temp2 *= N_prime
@@ -321,14 +287,8 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 		print("upper_tri shape:", upper_tri.shape)
 		upper_tri[temp4:temp3] = dev_upper.get()
 
-		temp4 = M1
+		temp4 += M1
 		ii += block
-
-		
-
-		# print("add_uper_cpu: ", add_uper_cpu.shape)
-		# nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr_prova" + str(count) + ".txt"
-		# add_uper_cpu.tofile(nome_file, sep="\n", format="%.7f")
 
 		cublas.cublasDestroy(h)
 
