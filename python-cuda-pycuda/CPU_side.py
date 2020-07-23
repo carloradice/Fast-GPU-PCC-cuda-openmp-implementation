@@ -4,8 +4,6 @@ import pycuda.driver as cuda
 from GPU_side import cor_mat_2, cor_mat_3
 import time
 
-#gpu = cuda.gpus.lst[0]
-
 # questa funzione controlla che ci sia abbastanza memoria per calcolare la matrice
 def remaining_mem(N, L, flag):
 	meminfo = cuda.mem_get_info()
