@@ -5,17 +5,6 @@
 #include <omp.h>
 
 
-/*long long remaining_N(int N, int L, int fflag) {
-
-	size_t free;
-	size_t total_mem;
-
-
-	return x;
-}
-
-*/
-
 void preprocessing(float * BOLD, int N, int L) {
 	for(size_t i = 0; i < N; i++) {
 		float * row = BOLD + i * L;
@@ -42,42 +31,37 @@ void preprocessing(float * BOLD, int N, int L) {
 }
 
 void CorMat_2(float * BOLD, float * upper_tri, int N, int L) {
-	// preprocessing fMRI data
-	preprocessing(BOLD, N, L);
-
+	
 	size_t i, j, k;
 	float * BOLD_transpose;
 	float * result;
+	clock_t start, stop;
+
+	// preprocessing fMRI data
+	start = clock();
+	preprocessing(BOLD, N, L);
+	stop = clock();
+	printf("Running time for preprocessing: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
+
 	BOLD_transpose = (float *) malloc((L * N) * sizeof(float));
 	result = (float *) malloc((N * N) * sizeof(float));
-/*	printf("BOLD matrix: \n");
-	for(i = 0; i < N; i++) {
-		for(j = 0; j < L; j++) {
-			printf("%f ", BOLD[i * L + j]);
-		}
-		printf("\n");
-	}*/
+
 	// get BOLD_transpose
+	start = clock();
 	float temp;
 	for(i = 0; i < N; i++) {
 		for(j = 0; j < L; j++) {
 			temp = BOLD[i * L + j];
 			BOLD_transpose[j * N + i] = temp;
 		}
-	} 
-/*	printf("BOLD transpose matrix: \n");
-	for(i = 0; i < L; i++) {
-		for(j = 0; j < N; j++) {
-			printf("%f ", BOLD_transpose[i * N + j]);
-		}
-		printf("\n");
-	}*/
+	}
+	stop = clock();
+	printf("Running time for transpose: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
 
-/* 	# pragma omp parallel shared (N, L, BOLD, BOLD_transpose, result) private (i, j, k)
+	// matrix product
+	start = clock();
+ 	# pragma omp parallel shared (N, L, BOLD, BOLD_transpose, result) private (i, j, k)
 	{
-		//int id;
-		//id = omp_get_thread_num();
-		//printf("Thread (%d) \n", id); 
 		# pragma omp for
 		for(i = 0; i < N; i++) {
 			for(j = 0; j < N; j++) {
@@ -87,28 +71,58 @@ void CorMat_2(float * BOLD, float * upper_tri, int N, int L) {
 				}	
 			}
 		}
-	}*/
-/*	for(i = 0; i < N; i++) {
+	}
+	stop = clock();
+	printf("Running time core function: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
+
+	start = clock();
+	for(i = 0; i < N; i++) {
 		for(j = 0; j < N; j++) {
 			result[i * N + j] = 0;
 			for(k = 0; k < L; k++) {
 				result[i * N + j] += BOLD[i * L + k] * BOLD_transpose[k * N + j];
 			}	
 		}
-	}*/
-/*	printf("Result matrix: \n");
-	for(i = 0; i < N; i++) {
-		for(j = 0; j < N; j++) {
-			printf("%f ", result[i * N + j]);	
-		}
-		printf("\n");
-	}*/
+	}
+	stop = clock();
+	printf("Running time core function non parallelo: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
+
 
 	// get upper triangular matrix
+	start = clock();
+	# pragma omp parallel shared (N, upper_tri, result) private (i, j)
+	{
+		int idx = 0;
+		for(i = 0; i < N; i++) {
+			for(j = 0; j < N; j++) {
+				idx = (N * i) + j - ((i * (i+1)) / 2);
+				idx -= (i+1);
+				if(i < j) {
+					upper_tri[idx] = result[i * N + j];
+				}
+			}
+		}
+	}
+	stop = clock();
+	printf("Running time to get upper tri: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
 
+	// get upper triangular matrix NON PARALLELO
+	start = clock();
+	int idx;
+	idx = 0;
+	for(i = 0; i < N; i++) {
+		for(j = 0; j < N; j++) {
+			if(i < j) {
+				upper_tri[idx] = result[i * N + j];
+				idx += 1;
+			}
+		}
+	}
+	stop = clock();
+	printf("Running time to get upper tri non parallelo: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
 
-	free(BOLD_transpose);
 	free(result);
+	free(BOLD_transpose);
 }
 
 
@@ -138,13 +152,6 @@ int main(int argc, char **argv) {
 	}
 	fclose(fp);
 
-/*	for(size_t k = 0; k < N; k++) {
-		for(size_t l = 0; l < L; l++) {
-			printf("%f ", BOLD[k*L+l]);
-		}
-			printf("\n");
-	}*/
-
 	long long M11 = (N-1);
 	M11 *= N;
 	M11 /= 2;
@@ -155,11 +162,8 @@ int main(int argc, char **argv) {
 	for(long long idx=0; idx<M11; idx++) {
 		upper_tri[idx] = 0;
 	}
-	// calcolo memoria necessaria per la matrice
-	//long long OOO = remaining_N(N, L, 0);
 
 	printf("Computing correlations ... \n");
-
 	// inizio calcolo tempo di esecuzione
 	start = clock();
 	// calcolo della matrice triangolare superiore
@@ -167,6 +171,12 @@ int main(int argc, char **argv) {
 	stop = clock();
 	printf("Running time for computing correlations: %f \n", (float)(stop - start)/CLOCKS_PER_SEC);
 
+	printf("Writing correlation values into the text file ... \n");
+	fp = fopen("/home/carlo/Documents/progetto-calcolo-scientifico/openmp_pcc_corrs.txt", "w");
+	for(long long idx=0; idx<M11; idx++) {
+			fprintf(fp, "%f \n", upper_tri[idx]);
+	}
+	fclose(fp);
 
 	free(upper_tri);
 	free(BOLD);
