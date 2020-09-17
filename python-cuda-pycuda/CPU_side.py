@@ -1,5 +1,4 @@
 import numpy as np
-import pycuda.autoinit
 import pycuda.driver as cuda
 from GPU_side import cor_mat_2, cor_mat_3
 import time
@@ -21,7 +20,7 @@ def remaining_mem(N, L, flag):
 
 def main():
 	# salvo la matrice come numpy array
-	BOLD = np.array(np.loadtxt("/home/carlo/Documents/progetto-calcolo-scientifico/random_matrix.txt"), np.float32)
+	BOLD = np.array(np.loadtxt("/home/carlo/Documents/progetto-calcolo-parallelo/random_matrix.txt"), np.float32)
 
 	# ottengo il numero di voxel e la lunghezza della time serie dalle dimensioni della matrice
 	N = BOLD.shape[0]
@@ -32,7 +31,7 @@ def main():
 	# creazione matrice triangolare superiore e inizializzazione a zero
 	size = int(((N-1) * N) / 2)
 	upper_tri = np.zeros(size, np.float32)
-	print("upper_tri shape:", upper_tri.shape)
+	# print("upper_tri shape:", upper_tri.shape)
 	
 	# calcolo memoria necessaria per la matrice
 	rem_mem = remaining_mem(N, L, 0)
@@ -59,7 +58,8 @@ def main():
 		delta = stop_time - start_time	
 		print("Running time for computing correlations: ", delta, "\n")
 
-	nome_file = "/home/carlo/Documents/progetto-calcolo-scientifico/python_gpu_pcc_corr.txt"
+	# print to file
+	nome_file = "/home/carlo/Documents/progetto-calcolo-parallelo/python_gpu_pcc_corr.txt"
 	upper_tri.tofile(nome_file, sep="\n", format="%.7f")
 	
 

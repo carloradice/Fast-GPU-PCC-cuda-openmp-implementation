@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
     ifstream myReadFile;
     sstm.str("");
     //sstm << name<<"random_matrix.txt";
-    sstm << "/home/carlo/Documents/progetto-calcolo-scientifico/random_matrix.txt";
+    sstm << "/home/carlo/Documents/progetto-calcolo-parallelo/random_matrix.txt";
     clock_t kho1,kho2;
     kho1=clock();
     string ad = sstm.str();
@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
         cudaEventElapsedTime(&time, start, stop);
     }
 
-    // scrittura valori della matrice triangolare in file binario
+/*    // scrittura valori della matrice triangolare in file binario
     if (wr == 'b'){
         cout<<"\nWriting correlation values into the binary file ... \n";
         ofstream OutFile;
@@ -216,6 +216,6 @@ int main(int argc, char *argv[])
         }
         correlations_print.close();
         cout<<"\nCorrelations are stored into the text file fast_gpu_pcc_corrs.txt \n";
-        }
+        } */
         return 0;
 }

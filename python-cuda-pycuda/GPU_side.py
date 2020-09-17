@@ -1,8 +1,8 @@
-from numba import vectorize, cuda as cd, float32
+#from numba import vectorize, cuda as cd, float32
 import numpy as np
 import math
 import time
-import cupy as cp
+#import cupy as cp
 import skcuda.cublas as cublas
 import  pycuda.gpuarray  as  gpuarray
 import pycuda.driver as cuda
@@ -44,11 +44,15 @@ def cor_mat_2(BOLD, upper_tri, N, L):
 	beta = np.float32(0.0)
 
 	# passaggio su device
+	start_time = time.time()
 	BOLD_device = gpuarray.to_gpu(BOLD)
 	result = np.zeros((BOLD.shape[0], BOLD.shape[0]), np.float32)
 	result_device = gpuarray.to_gpu(result)
-	print("BOLD_device shape:", BOLD_device.shape)
-	print("result_device shape:", result_device.shape)
+	# print("BOLD_device shape:", BOLD_device.shape)
+	# print("result_device shape:", result_device.shape)
+	stop_time = time.time()
+	delta = stop_time - start_time	
+	print("Running time matrices to device: ", delta, "\n")
 
 	start_time = time.time()
 	h = cublas.cublasCreate()
@@ -94,7 +98,7 @@ def cor_mat_2(BOLD, upper_tri, N, L):
 		}
 		""")
 	result_device = result_device.reshape(-1)
-	print("result device shape:", result_device.shape)
+	# print("result device shape:", result_device.shape)
 	upper_tri_device = gpuarray.to_gpu(upper_tri)
 	funct = mod.get_function("ker")
 	funct(result_device, 
@@ -121,7 +125,7 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	available_mem = float(meminfo[0])
 	available_mem /= np.dtype(np.float32).itemsize
 	available_mem -= N * L
-	print("Available memory: ", available_mem)
+	# print("Available memory: ", available_mem)
 
 	# preprocessing fMRI data in CPU
 	start_time = time.time()
@@ -130,12 +134,17 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	delta = stop_time - start_time	
 	print("Running time for preprocessing: ", delta, "\n")
 
+
 	# passaggio di BOLD in device
+	start_time = time.time()
 	BOLD_device = gpuarray.to_gpu(BOLD)
+	stop_time = time.time()
+	delta = stop_time - start_time	
+	print("Running time matrices to device: ", delta, "\n")
 
 	# calcolo memoria disponibile
-	meminfo = cuda.mem_get_info()
-	print("After BOLD_device free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+	# meminfo = cuda.mem_get_info()
+	# print("After BOLD_device free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 
 	# inizializzazione variabili
 	flag = 1
@@ -157,11 +166,11 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	while flag is 1:
 		print("###### ITERAZIONE ", count, " #####")
 		# calcolo memoria disponibile
-		meminfo = cuda.mem_get_info()
-		print("After BOLD_device free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+		# meminfo = cuda.mem_get_info()
+		# print("After BOLD_device free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 
-		print("block: ", block)
-		print("N_prime: ", N_prime)
+		# print("block: ", block)
+		# print("N_prime: ", N_prime)
 		# checking for the last chunk
 		if block == N_prime:
 			flag = 0
@@ -180,27 +189,30 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 
 		M1 = int(M1)
 		
-		print("M1: ", M1)
+		# print("M1: ", M1)
 		
 		pak += 1
 
-		print("so_far*L: ", so_far*L)
-
+		# print("so_far*L: ", so_far*L)
+		start_time = time.time()
 		result = np.zeros((block, N_prime), np.float32)
-		print("result shape: ", result.shape)
+		# print("result shape: ", result.shape)
 
 		BOLD_device = BOLD_device.reshape(-1)
 		
 		# allocate memory on the device for the result
 		result_device = gpuarray.to_gpu(result)
-		print("result_device shape: ", result_device.shape)
+		# print("result_device shape: ", result_device.shape)
 
-		# calcolo memoria disponibile
-		meminfo = cuda.mem_get_info()
-		print("Before cublasSgemm free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
-		
+		# # calcolo memoria disponibile
+		# meminfo = cuda.mem_get_info()
+		# print("Before cublasSgemm free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+		stop_time = time.time()
+		delta = stop_time - start_time	
+		print("Running time matrices to device: ", delta, "\n")
+
+		start_time = time.time()
 		h = cublas.cublasCreate()
-
 		cublas.cublasSgemm(h,
 				   'T',
 				   'n',
@@ -215,30 +227,34 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 				   beta,
 				   result_device.gpudata,
 				   block)
+		stop_time = time.time()
+		delta = stop_time - start_time	
+		print("Running time core function: ", delta, "\n")
 
 		temp2 = block
 		temp2 *= N_prime
 
 		# calcolo memoria disponibile
-		meminfo = cuda.mem_get_info()
-		print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+		# meminfo = cuda.mem_get_info()
+		# print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 		
 		# result_device = gpuarray.to_gpu(result1)
 
+		start_time = time.time()
 		threads_per_block = 1024
 		blocks_per_grid = 1 + math.ceil(((temp2-1) / threads_per_block))
 		grid = (blocks_per_grid, 1)
 
-		print("temp2:", temp2)
-		print("threads_per_block: ", threads_per_block)
-		print("blocks_per_grid: ", blocks_per_grid)
+		# print("temp2:", temp2)
+		# print("threads_per_block: ", threads_per_block)
+		# print("blocks_per_grid: ", blocks_per_grid)
 
 		upper = np.zeros(M1, np.float32)
-		print("upper shape:", upper.shape)
+		# print("upper shape:", upper.shape)
 		dev_upper = gpuarray.to_gpu(upper)
 
-		print("dev_upper shape: ", dev_upper.shape)
-		print("result_device shape: ", result_device.shape)
+		# print("dev_upper shape: ", dev_upper.shape)
+		# print("result_device shape: ", result_device.shape)
 
 		mod = pycuda.compiler.SourceModule("""
 			__global__ void ker2(float * cormat, float * upper,int n1,int n,long long upper_size,int N,int i_so_far,long long M1)
@@ -267,8 +283,8 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 			}
   			""")
 		# calcolo memoria disponibile
-		meminfo = cuda.mem_get_info()
-		print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+		# meminfo = cuda.mem_get_info()
+		# print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 		
 		funct = mod.get_function("ker2")
 		funct(result_device, 
@@ -284,8 +300,11 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
               )
 
 		temp3+=M1
-		print("upper_tri shape:", upper_tri.shape)
+		# print("upper_tri shape:", upper_tri.shape)
 		upper_tri[temp4:temp3] = dev_upper.get()
+		stop_time = time.time()
+		delta = stop_time - start_time	
+		print("Running time to get upper tri: ", delta, "\n")
 
 		temp4 += M1
 		ii += block
@@ -308,7 +327,7 @@ def cor_mat_3(BOLD, upper_tri, N, L, OOO):
 	del dev_upper
 
 	# calcolo memoria disponibile
-	meminfo = cuda.mem_get_info()
-	print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
+	# meminfo = cuda.mem_get_info()
+	# print("free: %s bytes, total, %s bytes" % (meminfo[0], meminfo[1]))
 
 	return upper_tri

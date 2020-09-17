@@ -1,7 +1,7 @@
 import numpy as np
 import time
 
-matrix = np.loadtxt("/home/carlo/Documents/progetto-calcolo-scientifico/random_matrix.txt")
+matrix = np.loadtxt("/home/carlo/Documents/progetto-calcolo-parallelo/random_matrix.txt")
 
 # library function 
 start_time = time.time()
@@ -20,7 +20,7 @@ print("Running time for computing correlations: ", delta, "\n")
 
 # print(triu_corrmatrix)
 
-np.savetxt("/home/carlo/Documents/progetto-calcolo-scientifico/python_cpu_pcc_corr.txt", triu_corrmatrix, delimiter=" ", fmt="%.7f")
+np.savetxt("/home/carlo/Documents/progetto-calcolo-parallelo/python_cpu_pcc_corr.txt", triu_corrmatrix, delimiter=" ", fmt="%.7f")
 
 # naive function
 start_time = time.time()

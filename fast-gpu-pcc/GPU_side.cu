@@ -99,7 +99,7 @@ int CorMat_2(float* upper_tri, float * BOLD, int N, int L)
         return stat;
     }
     
-    
+    first = clock();
     float * devBOLD; //Allocating space in GPU for storing fMRI data
     cudaStat = cudaMalloc ((void**)&devBOLD, sizeof(float) * L * N) ;
     
@@ -119,16 +119,23 @@ int CorMat_2(float* upper_tri, float * BOLD, int N, int L)
     
     float* devCormat;//allocating space in GPU for whole correlation matrix
     cudaMalloc ( (void**)&devCormat, sizeof(float) * total) ;
-    
+    second = clock();
+    cout<<"\nRunning time matrices to device: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
+
+    first = clock();
     stat = cublasSgemm(handle, CUBLAS_OP_T,  CUBLAS_OP_N, N,N,L,  &alpha, devBOLD, L, devBOLD, L, &beta, devCormat, N);//Performing matrix multiplication (fMRI data to its transpose)
     cudaDeviceSynchronize();
-    
+    second = clock();
+    cout<<"\nRunning time core function: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
+
+
     if (stat != CUBLAS_STATUS_SUCCESS)
     {
         cout<<"Error performing multiplication";
         return stat;
     }
     
+    first = clock();
     float* dev_upper;//Allocating space for extracting upper triangle part
     cudaMalloc ( (void**)&dev_upper, sizeof(float) * M1) ;
     
@@ -139,7 +146,9 @@ int CorMat_2(float* upper_tri, float * BOLD, int N, int L)
     gpuErrchk( cudaPeekAtLastError() );
     
     cudaMemcpy(upper_tri, dev_upper, sizeof(float) *M1, cudaMemcpyDeviceToHost);//copying upper triangle correlation matrix data back to CPU
-    
+    second = clock();
+    cout<<"\nRunning time to get upper tri: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
+
     if (cudaStat != cudaSuccess)
     {
         cout<<"Error in Cuda memcpy back to cpu";
@@ -164,7 +173,7 @@ int CorMat_2(float* upper_tri, float * BOLD, int N, int L)
 
 int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
 {
-    //clock_t first,second;    
+    clock_t first,second;    
     size_t free;int ii=0;
     size_t total_mem;
     cudaMemGetInfo(&free,&total_mem);
@@ -176,8 +185,10 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
     
     int flag=1;
 
-
+    first = clock();
     preprocessing( BOLD,  N, L);//Preprocessing fMRI data
+    second = clock();
+    cout<<"\nRunning time for preprocessing: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
 
     cudaError_t cudaStat;
     cublasStatus_t stat;
@@ -185,11 +196,15 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
     long long upper_size=(N-1);//computinf size of total correlation matrix
     upper_size*=N;
     upper_size/=2;
-    
+
+    first = clock();
     float * devBOLD;//initializing normalized fMRI data in GPU
     cudaStat = cudaMalloc ((void**)&devBOLD, sizeof(float) * L * N);
 
     stat = cublasSetMatrix(N, L, sizeof(float), BOLD, N, devBOLD, N);
+
+    second = clock();
+    cout<<"\nRunning time matrices to device: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
 
     cublasCreate(&handle) ;
     
@@ -199,8 +214,6 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
     int block,N_prime;
     block=OOO;
     N_prime=N;
-    
-    int count = 1; // creata da me
 
     float* add_uper_cpu=upper_tri;
     long long M1,temp,temp2=0,temp3=0;
@@ -212,13 +225,14 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
    // long long old_M1;
     long long cormat_fullsize;
 
-    std::cout << "Before while" << std::endl; 
-    std::cout << "block: " << block << std::endl; 
-    std::cout << "N_prime: " << N_prime << std::endl;
+    //std::cout << "Before while" << std::endl; 
+    //std::cout << "block: " << block << std::endl; 
+    //std::cout << "N_prime: " << N_prime << std::endl;
 
     std::cout << "In while" << std::endl; 
     while(flag==1)
-    {
+    {   
+        first = clock();
         //cout<<"this is block: "<<block<<"\n\n";        
         if(block==N_prime)//checking for the last chunk
            flag=0;
@@ -236,39 +250,39 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
 			cudaFree (devCormat);
 
 			}
-            cormat_fullsize=block;
-            cormat_fullsize*=N_prime;
+        cormat_fullsize=block;
+        cormat_fullsize*=N_prime;
 
-            std::cout << "block: " << block << std::endl; 
-            std::cout << "N_prime: " << N_prime << std::endl;
-            std::cout << "cormat_fullsize: " << cormat_fullsize << std::endl;
-            std::cout << "M1: " << M1 << std::endl;
+        //std::cout << "block: " << block << std::endl; 
+        //std::cout << "N_prime: " << N_prime << std::endl;
+        //std::cout << "cormat_fullsize: " << cormat_fullsize << std::endl;
+        //std::cout << "M1: " << M1 << std::endl;
 
-            cudaStat=cudaMalloc ( (void**)&devCormat, sizeof(float) * cormat_fullsize) ;
-            
-            if (cudaStat != cudaSuccess)
-            
-            {
-                cout<<"Error in Cuda Malloc and status is devcormat: "<<cudaStat;
-                return cudaStat;
-            }
-            
-            cudaStat =  cudaMalloc ( (void**)&dev_upper, sizeof(float) * M1) ;
-            if (cudaStat != cudaSuccess)
-            
-            {
-                cout<<"Error in Cuda Malloc and status is devcormat: "<<cudaStat;
-                return cudaStat;
-            }
-  
-            
-            //cout<<"\n IN PAK  0: "<<cormat_fullsize<<" " <<M1<<"*****";
-            //old_cormat_fullsize=cormat_fullsize;
-            //old_M1=M1;
-            pak++;
+        cudaStat=cudaMalloc ( (void**)&devCormat, sizeof(float) * cormat_fullsize) ;
+        
+        if (cudaStat != cudaSuccess)
+        
+        {
+            cout<<"Error in Cuda Malloc and status is devcormat: "<<cudaStat;
+            return cudaStat;
+        }
+        
+        cudaStat =  cudaMalloc ( (void**)&dev_upper, sizeof(float) * M1) ;
+        if (cudaStat != cudaSuccess)
+        
+        {
+            cout<<"Error in Cuda Malloc and status is devcormat: "<<cudaStat;
+            return cudaStat;
+        }
+        second = clock();
+        cout<<"\nRunning time matrices to device: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
+        //cout<<"\n IN PAK  0: "<<cormat_fullsize<<" " <<M1<<"*****";
+        //old_cormat_fullsize=cormat_fullsize;
+        //old_M1=M1;
+        pak++;
 
-        std::cout << "so_far*L: " << so_far*L << std::endl;
-
+        //std::cout << "so_far*L: " << so_far*L << std::endl;
+        first = clock();
         stat = cublasSgemm(handle, 
                            CUBLAS_OP_T,  
                            CUBLAS_OP_N, 
@@ -292,40 +306,35 @@ int CorMat_3(float* upper_tri, float * BOLD, int N, int L,long long OOO)
         }
 
         cudaDeviceSynchronize();
+        second = clock();
+        cout<<"\nRunning time core function: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
 
+        first = clock();
         temp2=block;
         temp2*=N_prime;
 
         int block_size=1024;
         long long grid_size=1+((temp2-1)/block_size);
 
-        std::cout << "temp2: " << temp2 << std::endl;
-        std::cout << "block_size: " << block_size << std::endl;
-        std::cout << "grid_size: " << grid_size << std::endl;
-        std::cout << "devCormat type: " << typeid(*devCormat).name();
+        //std::cout << "temp2: " << temp2 << std::endl;
+        //std::cout << "block_size: " << block_size << std::endl;
+        //std::cout << "grid_size: " << grid_size << std::endl;
+        //std::cout << "devCormat type: " << typeid(*devCormat).name();
 
+        
         ker2<<<grid_size,block_size>>>(devCormat,dev_upper,block,N_prime,upper_size,N,ii,M1);
         
 	    memset((void*)add_uper_cpu, 0, sizeof(float) *M1); 
 	
         cudaDeviceSynchronize();
+        second = clock();
+        cout<<"\nRunning time to get upper tri: \n"<<(double)(second-first)/CLOCKS_PER_SEC<<" \n";
+
         ii+=block;
         
         gpuErrchk( cudaPeekAtLastError() );
         
         cudaStat= cudaMemcpy(add_uper_cpu, dev_upper, sizeof(float) *M1, cudaMemcpyDeviceToHost);
-
-        // print di debug su file
-/*        ofstream correlations_print;
-        std::string file = "/home/carlo/Documents/progetto-calcolo-scientifico/fast_gpu_pcc_corrs_prova" + std::to_string(count) + ".txt";
-        count += 1;
-        correlations_print.open(file); 
-        for(long long tab =0;tab<M1;tab++) {    
-                   correlations_print << add_uper_cpu[tab] << '\n';
-        }
-        correlations_print.close();
-        std::cout << "stampa effettuata su file" << file << std::endl;*/
-
 
         if (cudaStat != cudaSuccess)
         {
