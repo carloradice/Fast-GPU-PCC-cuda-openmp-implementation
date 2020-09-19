@@ -34,6 +34,11 @@ long long remaining_N2(int N, int L,long long available_memory)
     long long temp=N;
     temp*=2;
     x/=temp;
+    
+    cout << "available_memory: " << available_memory << endl;
+    cout << "temp: " << temp << endl;
+    cout << "x: " << x << endl;
+
     return x;
 }
 
@@ -196,11 +201,11 @@ int main(int argc, char *argv[])
         cudaEventElapsedTime(&time, start, stop);
     }
 
-/*    // scrittura valori della matrice triangolare in file binario
+    // scrittura valori della matrice triangolare in file binario
     if (wr == 'b'){
         cout<<"\nWriting correlation values into the binary file ... \n";
         ofstream OutFile;
-        OutFile.open("/home/carlo/Documents/progetto-calcolo-scientifico/corrs.bin", ios::binary | ios::out);
+        OutFile.open("/home/carlo/Documents/progetto-calcolo-parallelo/corrs.bin", ios::binary | ios::out);
         OutFile.write((char*)upper_tri, sizeof(float)*M11);
         OutFile.close();
         cout<<"\nCorrelations are stored into the file corrs.bin \n";
@@ -210,12 +215,12 @@ int main(int argc, char *argv[])
     if (wr == 't'){
         cout<<"\nWriting correlation values into the text file ... \n";
         ofstream correlations_print;
-        correlations_print.open("/home/carlo/Documents/progetto-calcolo-scientifico/fast_gpu_pcc_corrs.txt");
+        correlations_print.open("/home/carlo/Documents/progetto-calcolo-parallelo/fast_gpu_pcc_corrs.txt");
         for(long long tab =0;tab<M11;tab++) {    
                    correlations_print << upper_tri[tab] << '\n';
         }
         correlations_print.close();
         cout<<"\nCorrelations are stored into the text file fast_gpu_pcc_corrs.txt \n";
-        } */
+        } 
         return 0;
 }

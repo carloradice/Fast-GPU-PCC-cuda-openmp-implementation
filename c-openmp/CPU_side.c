@@ -5,7 +5,7 @@
 
 
 long long remaining_mem(int N, int L) {
-	long long available_mem = 16000000000;
+	long long available_mem = 10000000000;
 	// division by float size = 4 byte
 	available_mem /= 4;
 	available_mem -= N * L;
@@ -16,11 +16,15 @@ long long remaining_mem(int N, int L) {
 }
 
 
-float remaining_N2(int N, int L, long long rem_mem) {
-	long long x=rem_mem;
-    long long temp=N;
-    temp*=2;
-    x/=temp;
+float remaining_N2(int N_prime, int L, long long rem_mem) {
+	
+	long long x = rem_mem;
+    long long temp = N_prime;
+    temp *= 2;
+    x /= temp;
+    printf("rem mem: %lld \n", rem_mem);
+    printf("N_prime: %d \n", N_prime);
+    printf("x: %lld \n", x);
     return x;
 }
 
@@ -148,11 +152,18 @@ void CorMat_2(float * BOLD, float * upper_tri, int N, int L) {
 }
 
 
-void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long rem_mem) {
+void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long OOO) {
 	
 	size_t i, j, k;
 	float * BOLD_transpose;
 	float * result;
+	float * BOLD_section;
+
+	long long available_mem = 10000000000;
+	available_mem /= sizeof(float);
+	available_mem -= (N*L);
+
+	printf("Available memory: %lld \n", available_mem);
 
 	double start_time, stop_time;
 
@@ -162,15 +173,31 @@ void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long rem_mem) {
 	stop_time = omp_get_wtime();
 	printf("Running time for preprocessing: %f \n", stop_time - start_time);
 
+	BOLD_transpose = (float *) malloc((L * N) * sizeof(float));
+
+	// get BOLD_transpose
+	start_time = omp_get_wtime(); 
+	float temporary;
+	for(i = 0; i < N; i++) {
+		for(j = 0; j < L; j++) {
+			temporary = BOLD[i * L + j];
+			BOLD_transpose[j * N + i] = temporary;
+		}
+	}
+	stop_time = omp_get_wtime(); 
+	printf("Running time for transpose: %f \n", stop_time - start_time);
+
 	int flag = 1;
 	int count = 0;
-	int block = 0;
+	int block = OOO;
 	int N_prime = N;
 	int so_far = 0;
 	int pak = 0;
+	int ii = 0;
 	long long M1, temp, temp2=0, temp3=0;
+	int limit = 0;
 	long long cormat_fullsize;
-	//float * upper;
+	float * upper_section;
 
 	while(flag == 1) {
 		printf("########## ITERAZIONE %d \n", count);
@@ -187,49 +214,137 @@ void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long rem_mem) {
 		M1 -= temp;
 
 		if(pak != 0) {
-			//free(upper);
-			free(result); //devCormat in C++ CUDA
+			free(result); //result = devCormat in C++ CUDA
+			free(upper_section);
 		}
 
 		cormat_fullsize = block;
 		cormat_fullsize *= N_prime;
 
+		printf("block: %d \n", block);
+		printf("N_prime: %d \n", N_prime);
+		printf("cormat_fullsize: %lld \n", cormat_fullsize);
+
 		result = (float *) malloc(cormat_fullsize * sizeof(float));
-		//upper = (float *) malloc(M1 * sizeof(float));
+		upper_section = (float *) malloc(M1 * sizeof(float));
+		
+		BOLD_section = (float *) malloc(N_prime * L * sizeof(float));
+
+		printf("get BOLD_section transpose \n");
+		if (count != 0) {
+			// get BOLD_section transpose
+			float temporary;
+			for(i = 0; i < N_prime; i++) {
+				for(j = 0; j < L; j++) {
+					temporary = BOLD[(so_far * L) + (i * L) + j];
+					BOLD_section[j * N_prime + i] = temporary;
+				}
+			}
+		}
 
 		pak++;
 
 		// matrix product
 		start_time = omp_get_wtime(); 
- 		# pragma omp parallel shared (block, L, BOLD, BOLD_transpose, result) private (i, j, k)
+		if (count != 0) {
+ 		# pragma omp parallel shared (block, N_prime, L, so_far, BOLD, BOLD_section, result) private (i, j, k)
 		{
-			# pragma omp for
-			for(i = 0; i < block; i++) {
-				for(j = 0; j < block; j++) {
+/*			# pragma omp for
+			for(i = so_far*L; i < (so_far*L + block*L); i++) {
+				for(j = so_far*L; j < (so_far*L + block*L); j++) {
 					result[i * N + j] = 0;
 					for(k = 0; k < L; k++) {
 						result[i * N + j] += BOLD[i * L + k] * BOLD_transpose[k * N + j];
 					}	
 				}
+			}*/
+	/*		# pragma omp for
+			for(i = 0; i < block; i++) {
+				for(j = 0; j < N_prime; j++) {
+					result[i * N_prime + j] = 0;
+					for(k = 0; k < L; k++) {
+						result[i * N_prime + j] += BOLD[(so_far * L) + (L * i) + k] * BOLD_transpose[k * N_prime + j];
+					}	
+				}
+			}*/
+			# pragma omp for
+			for(i = 0; i < block; i++) {
+				for(j = 0; j < N_prime; j++) {
+					result[i * N_prime + j] = 0;
+					for(k = 0; k < L; k++) {
+						result[i * N_prime + j] += BOLD[(so_far * L) + (i * L) + k] * BOLD_section[(k * N_prime) + j];
+					}	
+				}
+			}
+			
+		}
+		}
+		else {
+			# pragma omp parallel shared (block, N_prime, L, so_far, BOLD, BOLD_transpose, result) private (i, j, k)
+			{
+				# pragma omp for
+				for(i = 0; i < block; i++) {
+					for(j = 0; j < N_prime; j++) {
+						result[i * N_prime + j] = 0;
+						for(k = 0; k < L; k++) {
+							result[i * N_prime + j] += BOLD[L * i + k] * BOLD_transpose[k * N_prime + j];
+						}	
+					}
+				}
 			}
 		}
+
 		stop_time = omp_get_wtime();
 		printf("Running time core function: %f \n", stop_time - start_time);
-
+		
+		
+		/// PROVA DI STAMPA 
+/*		FILE *fp;
+		printf("Writing correlation values into the text file ... \n");
+		fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_test_iter.txt", "w");
+		for(long long idx=0; idx<cormat_fullsize; idx++) {
+			fprintf(fp, "%f \n", result[idx]);
+		}
+		fclose(fp);*/
+		// #################
+		
 		temp2 = block;
 		temp2 *= N_prime;
 
 		// get upper triangular matrix
 		start_time = omp_get_wtime(); 
-		# pragma omp parallel shared (block, upper_tri, result) private (i, j)
+		# pragma omp parallel shared (block, N_prime, upper_section, result) private (i, j)
 		{
-			int idx = 0;
+/*			int idx = ii;
 			for(i = 0; i < block; i++) {
-				for(j = 0; j < block; j++) {
-					idx = (block * i) + j - ((i * (i+1)) / 2);
+				for(j = 0; j < N; j++) {
+					idx += (N * i) + j - ((i * (i+1)) / 2);
 					idx -= (i+1);
 					if(i < j) {
-						upper_tri[idx] = result[i * block + j];
+						// tmp2 = i * N - (i * (i+1) / 2) + j - i
+						upper_tri[idx] = result[i * N + j];
+					}
+				}
+			}*/
+/*			int idx = 0;
+			for(i = 0; i < N; i++) {
+				for(j = 0; j < N; j++) {
+					idx = (N * i) + j - ((i * (i+1)) / 2);
+					idx -= (i+1);
+					if(i < j) {
+						upper_tri[idx] = result[i * N + j];
+					}
+				}
+			}*/
+			int idx = 0;
+			//# pragma omp for
+			
+			for(i = 0; i < block; i++) {
+				for(j = 0; j < N_prime; j++) {
+					idx = (N_prime * i) + j - ((i * (i+1)) / 2);
+					idx -= (i+1);
+					if(i < j) {
+						upper_section[idx] = result[i * N_prime + j];
 					}
 				}
 			}
@@ -237,21 +352,55 @@ void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long rem_mem) {
 		stop_time = omp_get_wtime();
 		printf("Running time to get upper tri: %f \n", stop_time - start_time);
 
-		temp3 += M1;
-		so_far += block;
-		if(N_prime>block)
-	        {
-	            N_prime=N_prime-block;
-	            block=remaining_N2(N_prime, L, rem_mem);
-	          
-	            if(N_prime  <block)//checking last chunk
-	             block=N_prime;
+		/// ################### PROVA DI STAMPA #######################
+		FILE *fp;
+		printf("Writing correlation values into the text file ... \n");
 
-	        }
+		if(count == 0)
+			fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_parte1.txt", "w");
+		if(count == 1)
+			fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_parte2.txt", "w");
+
+
+		long long M11 = (N-1);
+		M11 *= N;
+		M11 /= 2;
+		for(long long idx=0; idx<M1; idx++) {
+			fprintf(fp, "%f \n", upper_section[idx]);
+		}
+		fclose(fp); 
+		
+		// ###########################################################
+
+/*		for(int idx = 0; idx < M1; idx++) {
+			upper_tri[limit + idx] = upper_section[idx];
+		}
+
+		limit += M1 - 1;*/
+		ii = (N * (block - 1)) + (N - 1 ) - (((block - 1) * ((block - 1) + 1)) / 2) - ((block - 1) + 1);
+		ii += 1;
+		//temp3 += M1;
+		so_far += block;
+		if(N_prime>block) {
+            N_prime = N_prime-block;
+            block=remaining_N2(N_prime, L, available_mem);
+          
+            if(N_prime < block) {//checking last chunk
+             	block = N_prime;
+             	printf("END \n");
+         	}
+
+	    }
+
+	    printf("block: %d \n", block);
+	    printf("N_prime: %d \n", N_prime);
+
 		count++;
 	}
 
+	free(BOLD_section);
 	free(result);
+	free(upper_section);
 	free(BOLD_transpose);
 
 
