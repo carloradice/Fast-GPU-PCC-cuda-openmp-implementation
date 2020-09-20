@@ -48,7 +48,7 @@ def main():
 		delta = stop_time - start_time	
 		print("Running time for computing correlations: ", delta, "\n")
 
-	# se la matrice occupa più memoria del totale
+	# se la matrice occupa piu memoria del totale
 	if N > rem_mem:
 
 		print("cor_mat_3")

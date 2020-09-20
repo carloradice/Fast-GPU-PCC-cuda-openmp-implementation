@@ -101,19 +101,6 @@ void CorMat_2(float * BOLD, float * upper_tri, int N, int L) {
 	stop_time = omp_get_wtime();
 	printf("Running time core function: %f \n", stop_time - start_time);
 
-/*	start_time = omp_get_wtime(); 
-	for(i = 0; i < N; i++) {
-		for(j = 0; j < N; j++) {
-			result[i * N + j] = 0;
-			for(k = 0; k < L; k++) {
-				result[i * N + j] += BOLD[i * L + k] * BOLD_transpose[k * N + j];
-			}	
-		}
-	}
-	stop_time = omp_get_wtime();
-	printf("Running time core function non parallelo: %f \n", stop_time - start_time);*/
-
-
 	// get upper triangular matrix
 	start_time = omp_get_wtime(); 
 	# pragma omp parallel shared (N, upper_tri, result) private (i, j)
@@ -131,21 +118,6 @@ void CorMat_2(float * BOLD, float * upper_tri, int N, int L) {
 	}
 	stop_time = omp_get_wtime();
 	printf("Running time to get upper tri: %f \n", stop_time - start_time);
-
-	// get upper triangular matrix NON PARALLELO
-/*	start_time = omp_get_wtime(); 
-	int idx;
-	idx = 0;
-	for(i = 0; i < N; i++) {
-		for(j = 0; j < N; j++) {
-			if(i < j) {
-				upper_tri[idx] = result[i * N + j];
-				idx += 1;
-			}
-		}
-	}
-	stop_time = omp_get_wtime();
-	printf("Running time to get upper tri non parallelo: %f \n", stop_time - start_time);*/
 
 	free(result);
 	free(BOLD_transpose);
@@ -300,22 +272,6 @@ void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long OOO) {
 		stop_time = omp_get_wtime();
 		printf("Running time to get upper tri: %f \n", stop_time - start_time);
 
-		/// ################### PROVA DI STAMPA #######################
-/*		FILE *fp;
-		printf("Writing correlation values into the text file ... \n");
-
-		if(count == 0)
-			fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_parte1.txt", "w");
-		if(count == 1)
-			fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_parte2.txt", "w");
-
-
-		for(long long idx=0; idx<M1; idx++) {
-			fprintf(fp, "%f \n", upper_section[idx]);
-		}
-		fclose(fp); */
-		
-		// ###########################################################
 		long long M11 = (N-1);
 		M11 *= N;
 		M11 /= 2;
@@ -327,7 +283,6 @@ void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long OOO) {
 			}
 		}
 		
-		//limit += M1;
 		so_far += block;
 
 		if(N_prime>block) {
@@ -350,13 +305,8 @@ void CorMat_3(float * BOLD, float* upper_tri, int N, int L, long long OOO) {
 	free(BOLD_section);
 	free(result);
 	free(upper_section);
-//	free(BOLD_transpose);
-
 
 }
-
-
-
 
 
 int main(int argc, char **argv) {
@@ -423,10 +373,7 @@ int main(int argc, char **argv) {
 		CorMat_3(BOLD, upper_tri, N, L, rem_mem);
 		stop_time = omp_get_wtime(); 
 		printf("Running time for computing correlations: %f \n", stop_time - start_time);
-
-
 	}
-
 
 	printf("Writing correlation values into the text file ... \n");
 	fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_TEST.txt", "w");
