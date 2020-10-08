@@ -1,7 +1,10 @@
 # Implementation of Fast-GPU-PCC algorithm with Python CUDA and C OPENMP
 
-This repository contains the implementation of Fast-GPU-PCC algorithm in Python CUDA and C OPENMP. 
+This repository contains the implementation of Fast-GPU-PCC algorithm in Python CUDA and C OPENMP.
+
 The original repository of the algorithm can be viewed here: https://github.com/pcdslab/Fast-GPU-PCC .
+
+The folder fast-gpu-pcc contains the original code modified for our tests. 
 
 ## Matrix generator
 
