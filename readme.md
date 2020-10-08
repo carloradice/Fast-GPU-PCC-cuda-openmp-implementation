@@ -22,6 +22,7 @@ m = length of time series.
 ## PYTHON-CUDA
 
 Use the following command to execute the python-cuda-pycuda/CPU_side.py code:
+
 python3 CPU_side.py
 
 ## C-OPENMP
@@ -42,7 +43,11 @@ t = to write the matrix in a text file.
 ## Requirements
 
 python: 3.6.9
+
 GCC: 7.5.0
+
 pucuda: 2019.1.2
+
 scikit-cuda: 0.5.3
+
 numpy: 1.19.1
