@@ -59,6 +59,7 @@ def main():
 		print("Running time for computing correlations: ", delta, "\n")
 
 	# print to file
+	print("Writing correlation values into the text file ...")
 	nome_file = "/home/carlo/Documents/progetto-calcolo-parallelo/python_gpu_pcc_corr.txt"
 	upper_tri.tofile(nome_file, sep="\n", format="%.7f")
 	

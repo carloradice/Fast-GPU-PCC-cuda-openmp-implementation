@@ -376,7 +376,7 @@ int main(int argc, char **argv) {
 	}
 
 	printf("Writing correlation values into the text file ... \n");
-	fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs_TEST.txt", "w");
+	fp = fopen("/home/carlo/Documents/progetto-calcolo-parallelo/openmp_pcc_corrs.txt", "w");
 	for(long long idx=0; idx<M11; idx++) {
 			fprintf(fp, "%f \n", upper_tri[idx]);
 	}
