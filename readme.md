@@ -22,7 +22,7 @@ n = number of voxel;
 
 m = length of time series.
 
-## PYTHON-CUDA
+## Python-CUDA
 
 Use the following command to execute the python-cuda-pycuda/CPU_side.py code:
 
@@ -49,7 +49,7 @@ python: 3.6.9
 
 GCC: 7.5.0
 
-pucuda: 2019.1.2
+pycuda: 2019.1.2
 
 scikit-cuda: 0.5.3
 
